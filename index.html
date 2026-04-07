@@ -63,7 +63,7 @@
 </head>
 <body>
 
-<aside id="sidebar">
+<!-- <aside id="sidebar">
     <h2 style="font-size: 1rem; color: var(--dark-pink);">账户管理</h2>
     <select id="user-selector" style="width: 100%; padding: 5px; margin-bottom: 15px;">
         <option>小玉</option>
@@ -76,6 +76,26 @@
     </div>
     <button class="btn-main" id="auth-btn" style="width: 100%;">解锁数据</button>
     <p style="font-size: 0.7rem; color: #999; margin-top: auto;">数据状态：<span id="lock-status">已锁定 🔒</span></p>
+</aside> -->
+
+<aside id="sidebar">
+<h2 style="font-size: 1rem; color: var(--dark-pink);" id="panel-title">科研站登录</h2>
+
+<div id="auth-fields">
+    <input type="text" id="username" placeholder="用户名" style="width: 100%; padding: 8px; margin-bottom: 10px; border: 1px solid var(--primary-pink); border-radius: 5px; box-sizing: border-box;">
+    
+    <div class="password-container" style="position: relative; margin-bottom: 10px;">
+        <input type="password" id="pass-input" placeholder="输入密码(6位以上)..." 
+                style="width: 100%; padding: 8px 30px 8px 10px; border: 1px solid var(--primary-pink); border-radius: 5px; box-sizing: border-box; outline: none;">
+        <span id="toggle-eye" style="position: absolute; right: 8px; top: 50%; transform: translateY(-50%); cursor: pointer; font-size: 0.9rem;">🙈</span>
+    </div>
+</div>
+
+<button class="btn-main" id="auth-btn" style="width: 100%;">进入空间</button>
+<p id="switch-auth-mode" style="font-size: 0.7rem; color: var(--dark-pink); cursor: pointer; text-align: center; margin-top: 10px;">没有账号？去注册</p>
+
+<p style="font-size: 0.7rem; color: #999; margin-top: auto;">当前用户：<span id="user-display">未登录</span></p>
+<p style="font-size: 0.7rem; color: #999;">数据状态：<span id="lock-status">已锁定 🔒</span></p>
 </aside>
 
 <main id="main-content">
@@ -138,65 +158,96 @@
 </main>
 
 <script>
-    let SECRET_KEY = "";
-    let allData = {};
-    const STORAGE_KEY = "grad_dashboard_data";
-    let viewingDate = new Date().toISOString().split('T')[0];
+    let isRegisterMode = false;
+    let currentUser = "";
+
+    // 校验密码强度
+    function isStrongPassword(pw) {
+        return pw.length >= 6; // 你可以根据需要增加正则校验（数字+字母+符号）
+    }
 
     window.onload = () => {
         initCalendarControls();
         renderCalendar();
-        document.getElementById('auth-btn').onclick = unlock;
+        
+        const authBtn = document.getElementById('auth-btn');
+        const switchMode = document.getElementById('switch-auth-mode');
+        
+        // 切换注册/登录模式
+        switchMode.onclick = () => {
+            isRegisterMode = !isRegisterMode;
+            document.getElementById('panel-title').innerText = isRegisterMode ? "新用户注册" : "科研站登录";
+            authBtn.innerText = isRegisterMode ? "确认注册" : "进入空间";
+            switchMode.innerText = isRegisterMode ? "已有账号？去登录" : "没有账号？去注册";
+        };
 
+        // 眼睛切换逻辑 (保持你要求的显式/隐式逻辑)
         const passInput = document.getElementById('pass-input');
         const toggleEye = document.getElementById('toggle-eye');
         toggleEye.onclick = () => {
             if (passInput.type === "password") {
-                passInput.type = "text";
-                toggleEye.innerText = "👁️"; // 显式状态，图标显示睁眼
+                passInput.type = "text"; toggleEye.innerText = "👁️";
             } else {
-                passInput.type = "password";
-                toggleEye.innerText = "🙈"; // 隐藏状态，图标显示闭眼
+                passInput.type = "password"; toggleEye.innerText = "🙈";
             }
         };
-        
-        // 显示时间
-        setInterval(() => {
-            document.getElementById('current-time').innerText = new Date().toLocaleString();
-        }, 1000);
+
+        authBtn.onclick = handleAuth;
     };
 
-    function unlock() {
-        const key = document.getElementById('pass-input').value;
-        if (!key) { alert("请输入密钥！"); return; }
+    function handleAuth() {
+        const user = document.getElementById('username').value.trim();
+        const pass = document.getElementById('pass-input').value;
 
-        const raw = localStorage.getItem(STORAGE_KEY);
-        if (!raw) {
-            SECRET_KEY = key;
-            allData = {};
-            alert("新用户密钥设置成功！已为您开启加密空间。");
+        if (!user || !pass) { alert("请填写完整信息！"); return; }
+        if (!isStrongPassword(pass)) { alert("密码要求不少于6位！"); return; }
+
+        const userKey = "user_config_" + user;
+        const dataKey = "grad_data_" + user;
+
+        if (isRegisterMode) {
+            // 注册逻辑
+            if (localStorage.getItem(userKey)) { alert("该用户名已存在！"); return; }
+            localStorage.setItem(userKey, CryptoJS.SHA256(pass).toString());
+            localStorage.setItem(dataKey, ""); // 初始化空白数据
+            alert("注册成功！请登录。");
+            location.reload();
         } else {
-            try {
-                const bytes = CryptoJS.AES.decrypt(raw, key);
-                const decryptedText = bytes.toString(CryptoJS.enc.Utf8);
-                if (!decryptedText) throw new Error();
-                allData = JSON.parse(decryptedText);
-                SECRET_KEY = key;
-            } catch (e) {
-                alert("密钥错误，请重新输入！");
-                return;
+            // 登录逻辑
+            const storedHash = localStorage.getItem(userKey);
+            if (!storedHash || CryptoJS.SHA256(pass).toString() !== storedHash) {
+                alert("用户名或密码错误！"); return;
             }
+
+            // 登录成功
+            SECRET_KEY = pass; // 使用原始密码作为 AES 密钥
+            currentUser = user;
+            const raw = localStorage.getItem(dataKey);
+            
+            if (raw) {
+                try {
+                    const bytes = CryptoJS.AES.decrypt(raw, SECRET_KEY);
+                    allData = JSON.parse(bytes.toString(CryptoJS.enc.Utf8));
+                } catch(e) { alert("数据解密失败！"); return; }
+            } else {
+                allData = {};
+            }
+
+            document.getElementById('user-display').innerText = user;
+            document.getElementById('lock-status').innerText = "已解锁 🔓";
+            document.getElementById('auth-fields').style.display = "none";
+            document.getElementById('auth-btn').style.display = "none";
+            document.getElementById('switch-auth-mode').style.display = "none";
+            
+            switchDate(viewingDate);
         }
-        document.getElementById('lock-status').innerText = "已解锁 🔓";
-        document.getElementById('pass-input').style.borderColor = "#a2d2ff";
-        renderCalendar();
-        switchDate(viewingDate);
     }
 
     function saveData() {
-        if(!SECRET_KEY) return;
+        if(!SECRET_KEY || !currentUser) return;
+        const dataKey = "grad_data_" + currentUser;
         const ciphertext = CryptoJS.AES.encrypt(JSON.stringify(allData), SECRET_KEY).toString();
-        localStorage.setItem(STORAGE_KEY, ciphertext);
+        localStorage.setItem(dataKey, ciphertext);
         renderCalendar();
     }
 
