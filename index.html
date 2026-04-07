@@ -158,9 +158,13 @@
 </main>
 
 <script>
+    // --- 1. 全局变量声明 ---
     let isRegisterMode = false;
     let currentUser = "";
-
+    let SECRET_KEY = ""; // 存储解密密钥
+    let allData = {};    // 存储当前用户的所有数据
+    let viewingDate = new Date().toISOString().split('T')[0]; // 默认为今天 (YYYY-MM-DD)
+ 
     // 校验密码强度
     function isStrongPassword(pw) {
         return pw.length >= 6; // 你可以根据需要增加正则校验（数字+字母+符号）
@@ -211,7 +215,8 @@
             localStorage.setItem(userKey, CryptoJS.SHA256(pass).toString());
             localStorage.setItem(dataKey, ""); // 初始化空白数据
             alert("注册成功！请登录。");
-            location.reload();
+            // location.reload();
+            document.getElementById('switch-auth-mode').click();
         } else {
             // 登录逻辑
             const storedHash = localStorage.getItem(userKey);
@@ -227,12 +232,15 @@
             if (raw) {
                 try {
                     const bytes = CryptoJS.AES.decrypt(raw, SECRET_KEY);
+                    const decryptedText = bytes.toString(CryptoJS.enc.Utf8);
                     allData = JSON.parse(bytes.toString(CryptoJS.enc.Utf8));
-                } catch(e) { alert("数据解密失败！"); return; }
+                } catch(e) { 
+                    console.error(e);
+                    alert("数据解密失败！"); return; }
             } else {
                 allData = {};
             }
-
+            // UI 更新
             document.getElementById('user-display').innerText = user;
             document.getElementById('lock-status').innerText = "已解锁 🔓";
             document.getElementById('auth-fields').style.display = "none";
@@ -364,6 +372,7 @@
         const file = fileInput.files[0];
         if (!file) { alert("请先选择文件！"); return; }
         if (!allData[d]) allData[d] = { checkIn: "", checkOut: "", moods: [], todos: [], summary: "", files: [] };
+        if (!allData[d].files) allData[d].files = [];
         allData[d].files.push(`${file.name} (${new Date().toLocaleTimeString()})`);
         saveData(); switchDate(d);
         fileInput.value = "";
